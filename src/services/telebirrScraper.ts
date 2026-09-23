@@ -35,11 +35,11 @@ const httpsAgent = env.cbeAllowInsecureTls
 
 const HEADERS_DESKTOP: Record<string, string> = {
   'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-  'accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+  accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
   'accept-language': 'en-US,en;q=0.9',
   'accept-encoding': 'gzip, deflate, br',
   'cache-control': 'no-cache',
-  'pragma': 'no-cache',
+  pragma: 'no-cache',
   'upgrade-insecure-requests': '1',
   'sec-ch-ua-mobile': '?0',
   'sec-ch-ua-platform': '"Windows"',
@@ -52,7 +52,7 @@ const HEADERS_DESKTOP: Record<string, string> = {
 
 const HEADERS_APP: Record<string, string> = {
   'user-agent': 'Telebirr/1.0 (Android)',
-  'accept': 'text/html,application/xhtml+xml,*/*',
+  accept: 'text/html,application/xhtml+xml,*/*',
   'accept-language': 'en-US,en;q=0.9',
   'accept-encoding': 'gzip, deflate, br',
 };
@@ -72,7 +72,10 @@ function saveDebug(tag: string, content: string) {
   } catch {}
 }
 
-export type TelebirrInput = { kind: 'sms'; text: string } | { kind: 'reference'; reference: string } | { kind: 'url'; url: string };
+export type TelebirrInput =
+  | { kind: 'sms'; text: string }
+  | { kind: 'reference'; reference: string }
+  | { kind: 'url'; url: string };
 
 export function classifyTelebirrInput(raw: string): TelebirrInput {
   const t = raw.trim();
@@ -136,7 +139,9 @@ async function fetchFromSms(text: string): Promise<TelebirrReceipt> {
     const html = await fetchFromUrl(u[0]);
     if (html.status === 'success' && (html.receiverName || html.amount)) {
       const m: any = { ...sms };
-      for (const [k, v] of Object.entries(html)) if (v !== undefined && v !== null && v !== '' && v !== 'none') m[k] = v;
+      for (const [k, v] of Object.entries(html)) {
+        if (v !== undefined && v !== null && v !== '' && v !== 'none') m[k] = v;
+      }
       m.source = 'html';
       return m;
     }
@@ -170,7 +175,13 @@ async function fetchFromUrl(url: string): Promise<TelebirrReceipt> {
   return { referenceNumber: ref, status: 'not_found', source: 'html', error: 'Page loaded (' + res.html.length + ' bytes) but no fields recognized' };
 }
 
-interface FetchOutcome { ok: boolean; status: number; html: string; error?: string; geoBlocked?: boolean; }
+interface FetchOutcome {
+  ok: boolean;
+  status: number;
+  html: string;
+  error?: string;
+  geoBlocked?: boolean;
+}
 
 async function tryFetch(c: AxiosInstance, url: string): Promise<FetchOutcome> {
   try {
@@ -184,13 +195,8 @@ async function tryFetch(c: AxiosInstance, url: string): Promise<FetchOutcome> {
 }
 
 // -------------------------------------------------------------
-// HTML parser â€” handles Amharic/English dual labels
+// HTML parser — Amharic/English dual labels
 // -------------------------------------------------------------
-// Real Telebirr label format:
-//   á‹¨áŠ¨á‹á‹­ áˆµáˆ/Payer Name Dagim Desalegn Chane
-//   á‹¨áŠ­áá‹« á‰áŒ¥áˆ­/Invoice No. DIN92X87AT
-//   á‹¨á‰°áŠ¨áˆáˆˆá‹ áˆ˜áŒ áŠ•/Settled Amount 1 Birr
-// Values are separated from labels by whitespace and stop at the next Amharic char.
 
 export function parseTelebirrHtml(referenceNumber: string, html: string): TelebirrReceipt {
   const $ = cheerio.load(html);
@@ -200,23 +206,13 @@ export function parseTelebirrHtml(referenceNumber: string, html: string): Telebi
     return { referenceNumber, status: 'not_found', source: 'html' };
   }
 
-  // Extract value after a specific English label. Stops at the next Amharic char (U+1200-U+137F)
-  // or at "end of string".
   const get = (label: string): string | undefined => {
-    const esc = label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const esc = label.replace(/[.*+?^\${}()|[\]\\]/g, '\\$&');
     const re = new RegExp(esc + '[\\s.:\\u00A0]*([^]*?)(?=[\\u1200-\\u137F]|$)', 'i');
     const m = bodyText.match(re);
     if (!m) return undefined;
     const val = m[1].replace(/\s+/g, ' ').trim();
     return val.length > 0 ? val : undefined;
-  };
-
-  // Amounts may be followed by "Birr" - strip it
-  const amountFrom = (label: string): number | undefined => {
-    const v = get(label);
-    if (!v) return undefined;
-    const cleaned = v.replace(/Birr/i, '').trim();
-    return parseAmount(cleaned);
   };
 
   const r: TelebirrReceipt = {
@@ -231,42 +227,28 @@ export function parseTelebirrHtml(referenceNumber: string, html: string): Telebi
   r.receiverName = get('Credited Party name');
   r.receiverAccount = get('Credited party account no');
   r.referenceNumber = get('Invoice No.') ?? referenceNumber;
-  r.date = get('Payment date');
-  r.amount = amountFrom('Settled Amount');
-  r.serviceFee = amountFrom('Service fee VAT') !== undefined ? amountFrom('Service fee') : amountFrom('Service fee');
-  r.vat = amountFrom('Service fee VAT');
-  r.totalPaid = amountFrom('Total Paid Amount');
 
-  // Fallback to table-based parsing if nothing found
-  if (!r.payerName && !r.receiverName && !r.amount) {
-    const fields: Record<string, string> = {};
-    $('tr').each((_, row) => {
-      const cells = $(row).find('td, th');
-      if (cells.length < 2) return;
-      const l = cells.eq(0).text().replace(/\s+/g, ' ').trim().toLowerCase();
-      const v = cells.eq(1).text().replace(/\s+/g, ' ').trim();
-      if (l && v) fields[l] = v;
-    });
+  // Date: DD-MM-YYYY HH:MM:SS
+  const dateMatch = bodyText.match(/(\d{2}[-\/]\d{2}[-\/]\d{4}\s+\d{2}:\d{2}:\d{2})/);
+  if (dateMatch) r.date = dateMatch[1];
 
-    const pick = (...keys: string[]) => {
-      for (const k of keys) {
-        const kk = k.toLowerCase();
-        for (const [fk, fv] of Object.entries(fields)) {
-          if (fk.endsWith(kk)) return fv;
-        }
-      }
-      return undefined;
-    };
-
-    if (!r.payerName) r.payerName = pick('payer name');
-    if (!r.receiverName) r.receiverName = pick('credited party name', 'receiver name');
-    if (!r.referenceNumber) r.referenceNumber = pick('invoice no.', 'receipt number', 'transaction number') ?? referenceNumber;
-    if (!r.date) r.date = pick('payment date', 'transaction date');
-    if (!r.amount) r.amount = parseAmount((pick('settled amount', 'amount') ?? '').replace(/Birr/i, ''));
-    if (!r.totalPaid) r.totalPaid = parseAmount((pick('total paid amount', 'total paid') ?? '').replace(/Birr/i, ''));
+  // Amounts: label-based extraction (positional indexing is unreliable due to hidden chars)
+  const settledM = bodyText.match(/\d{2}[-\/]\d{2}[-\/]\d{4}\s+\d{2}:\d{2}:\d{2}\s+([\d,]+\.?\d*)\s*Birr/);
+  if (settledM) r.amount = Number(settledM[1].replace(/,/g, ''));
+  if (r.amount === undefined && r.totalPaid !== undefined) {
+    const derived = r.totalPaid - (r.serviceFee || 0) - (r.vat || 0);
+    if (derived > 0) r.amount = Number(derived.toFixed(2));
   }
 
-  // Success criteria: need at least 2 meaningful fields
+  const serviceFeeM = bodyText.match(/Service fee(?![\s\u00A0]+VAT)[\s\u00A0]+([\d,]+\.?\d*)\s*Birr/i);
+  if (serviceFeeM) r.serviceFee = Number(serviceFeeM[1].replace(/,/g, ''));
+
+  const vatM = bodyText.match(/Service fee VAT[\s\u00A0]*([\d,]+\.?\d*)\s*Birr/i);
+  if (vatM) r.vat = Number(vatM[1].replace(/,/g, ''));
+
+  const totalM = bodyText.match(/Total Paid Amount[\s\u00A0]+([\d,]+\.?\d*)\s*Birr/i);
+  if (totalM) r.totalPaid = Number(totalM[1].replace(/,/g, ''));
+
   const meaningful = [r.payerName, r.receiverName, r.amount, r.referenceNumber].filter(Boolean).length;
   if (meaningful < 2) return { referenceNumber, status: 'not_found', source: 'html' };
   return r;
