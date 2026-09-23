@@ -1,3 +1,15 @@
+$ErrorActionPreference = "Stop"
+$root = "C:\Users\Dagi\Desktop\cbe-verify-api"
+Set-Location $root
+
+function W($rel, $content) {
+    $full = Join-Path $root $rel
+    [System.IO.File]::WriteAllText($full, $content, [System.Text.UTF8Encoding]::new($false))
+    Write-Host "  wrote: $rel" -ForegroundColor Cyan
+}
+
+Write-Host "`n=== Writing telebirrScraper.ts with Amharic/English label parser ===" -ForegroundColor Yellow
+W "src\services\telebirrScraper.ts" @'
 import axios, { AxiosInstance } from 'axios';
 import * as cheerio from 'cheerio';
 import https from 'node:https';
@@ -184,12 +196,12 @@ async function tryFetch(c: AxiosInstance, url: string): Promise<FetchOutcome> {
 }
 
 // -------------------------------------------------------------
-// HTML parser â€” handles Amharic/English dual labels
+// HTML parser — handles Amharic/English dual labels
 // -------------------------------------------------------------
 // Real Telebirr label format:
-//   á‹¨áŠ¨á‹á‹­ áˆµáˆ/Payer Name Dagim Desalegn Chane
-//   á‹¨áŠ­áá‹« á‰áŒ¥áˆ­/Invoice No. DIN92X87AT
-//   á‹¨á‰°áŠ¨áˆáˆˆá‹ áˆ˜áŒ áŠ•/Settled Amount 1 Birr
+//   የከፋይ ስም/Payer Name Dagim Desalegn Chane
+//   የክፍያ ቁጥር/Invoice No. DIN92X87AT
+//   የተከፈለው መጠን/Settled Amount 1 Birr
 // Values are separated from labels by whitespace and stop at the next Amharic char.
 
 export function parseTelebirrHtml(referenceNumber: string, html: string): TelebirrReceipt {
@@ -278,3 +290,14 @@ function parseAmount(s: string): number | undefined {
   const n = Number(c);
   return Number.isFinite(n) ? n : undefined;
 }
+'@
+
+Write-Host "`n=== Running test ===" -ForegroundColor Green
+node test-telebirr-direct.js DIN92X87AT
+
+Write-Host "`n=== Committing and pushing ===" -ForegroundColor Yellow
+git add .
+git commit -m "Fix Telebirr HTML parser: handle Amharic/English dual labels"
+git push
+
+Write-Host "`n=== DONE ===" -ForegroundColor Green
