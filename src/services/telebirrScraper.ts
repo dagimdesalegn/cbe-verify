@@ -131,22 +131,9 @@ export function parseTelebirrSms(text: string): TelebirrReceipt {
 }
 
 async function fetchFromSms(text: string): Promise<TelebirrReceipt> {
-  const sms = parseTelebirrSms(text);
-  if (sms.status !== 'success' || !sms.referenceNumber) return sms;
-  const u = text.match(/https:\/\/transactioninfo\.ethiotelecom\.et\/receipt\/[A-Z0-9]+/i);
-  if (!u) return sms;
-  try {
-    const html = await fetchFromUrl(u[0]);
-    if (html.status === 'success' && (html.receiverName || html.amount)) {
-      const m: any = { ...sms };
-      for (const [k, v] of Object.entries(html)) {
-        if (v !== undefined && v !== null && v !== '' && v !== 'none') m[k] = v;
-      }
-      m.source = 'html';
-      return m;
-    }
-  } catch {}
-  return sms;
+  // SMS text contains all required fields. Return immediately.
+  // (URL enrichment was adding 15-30s for no added value.)
+  return parseTelebirrSms(text);
 }
 
 // -------------------------------------------------------------
