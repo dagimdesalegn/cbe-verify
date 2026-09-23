@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { db } from '../db';
 import { fetchCbeReceipt } from './cbeScraper';
+import { fetchTelebirrReceipt } from './telebirrScraper';
 import { deliverWebhook } from './webhookService';
 import { sseBus } from './sseBus';
 import { logger } from '../utils/logger';
@@ -96,39 +97,70 @@ export async function runVerification(requestId: string, input: VerifyInput): Pr
   sseBus.emit(requestId, { requestId, processingStatus: 'running', status: 'pending', verified: false });
 
   const reference = input.referenceNumber ?? input.reference ?? '';
+  const bank = input.bank.toLowerCase();
   let result: VerifyResult;
 
   try {
-    if (input.bank !== 'cbe') throw new Error('Unsupported bank: ' + input.bank + '. Only cbe is implemented.');
+    if (bank === 'cbe') {
+      const receipt = await fetchCbeReceipt(reference, input.accountSuffix ?? input.suffix);
 
-    const receipt = await fetchCbeReceipt(reference, input.accountSuffix ?? input.suffix);
+      if (receipt.status === 'not_found') {
+        result = {
+          requestId, bank: input.bank, processingStatus: 'completed',
+          status: 'not_found', verified: false,
+          referenceNumber: receipt.referenceNumber || reference,
+          error: receipt.error,
+        };
+      } else {
+        result = {
+          requestId, bank: input.bank, processingStatus: 'completed',
+          status: 'success', verified: true,
+          amount: receipt.amount,
+          currency: receipt.currency,
+          senderName: receipt.payerName,
+          senderAccount: receipt.payerAccount,
+          receiverName: receipt.receiverName,
+          receiverAccount: receipt.receiverAccount,
+          referenceNumber: receipt.referenceNumber,
+          accountSuffix: input.accountSuffix ?? input.suffix,
+          date: receipt.date,
+          reason: receipt.reason,
+          serviceCharge: receipt.serviceCharge,
+          vat: receipt.vat,
+          totalAmount: receipt.totalAmount,
+          source: receipt.source,
+        };
+      }
+    } else if (bank === 'telebirr') {
+      const receipt = await fetchTelebirrReceipt(reference);
 
-    if (receipt.status === 'not_found') {
-      result = {
-        requestId, bank: input.bank, processingStatus: 'completed',
-        status: 'not_found', verified: false,
-        referenceNumber: receipt.referenceNumber || reference,
-        error: receipt.error,
-      };
+      if (receipt.status === 'not_found') {
+        result = {
+          requestId, bank: input.bank, processingStatus: 'completed',
+          status: 'not_found', verified: false,
+          referenceNumber: receipt.referenceNumber || reference,
+          error: receipt.error,
+        };
+      } else {
+        result = {
+          requestId, bank: input.bank, processingStatus: 'completed',
+          status: 'success', verified: true,
+          amount: receipt.amount,
+          currency: receipt.currency,
+          senderName: receipt.payerName,
+          senderAccount: receipt.payerPhone,
+          receiverName: receipt.receiverName,
+          receiverAccount: receipt.receiverAccount || receipt.receiverPhone,
+          referenceNumber: receipt.referenceNumber,
+          date: receipt.date,
+          serviceCharge: receipt.serviceFee,
+          vat: receipt.vat,
+          totalAmount: receipt.totalPaid,
+          source: receipt.source,
+        };
+      }
     } else {
-      result = {
-        requestId, bank: input.bank, processingStatus: 'completed',
-        status: 'success', verified: true,
-        amount: receipt.amount,
-        currency: receipt.currency,
-        senderName: receipt.payerName,
-        senderAccount: receipt.payerAccount,
-        receiverName: receipt.receiverName,
-        receiverAccount: receipt.receiverAccount,
-        referenceNumber: receipt.referenceNumber,
-        accountSuffix: input.accountSuffix ?? input.suffix,
-        date: receipt.date,
-        reason: receipt.reason,
-        serviceCharge: receipt.serviceCharge,
-        vat: receipt.vat,
-        totalAmount: receipt.totalAmount,
-        source: receipt.source,
-      };
+      throw new Error('Unsupported bank: ' + input.bank + '. Supported banks: cbe, telebirr.');
     }
 
     updateStmt.run({
@@ -141,7 +173,7 @@ export async function runVerification(requestId: string, input: VerifyInput): Pr
       sender_name: result.senderName ?? null,
       receiver_name: result.receiverName ?? null,
       receiver_account: result.receiverAccount ?? null,
-      raw_data: JSON.stringify(receipt),
+      raw_data: JSON.stringify(result),
       error: result.error ?? null,
     });
   } catch (err: any) {

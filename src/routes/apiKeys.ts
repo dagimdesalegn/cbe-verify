@@ -15,7 +15,7 @@ router.post('/api-keys', requireApiKey('apikeys:write'), (req, res) => {
   const created = generateApiKey(body.name, body.permissions);
   res.status(201).json({
     success: true,
-    message: 'API key created. Save this key â€” it will not be shown again.',
+    message: 'API key created. Save this key - it will not be shown again.',
     data: { id: created.id, key: created.key },
   });
 });

@@ -14,8 +14,6 @@ CREATE TABLE IF NOT EXISTS verification_requests (
   bank               TEXT NOT NULL,
   reference_number   TEXT,
   account_suffix     TEXT,
-  phone_number       TEXT,
-  settlement_account TEXT,
   processing_status  TEXT NOT NULL DEFAULT 'queued',
   status             TEXT,
   verified           INTEGER,

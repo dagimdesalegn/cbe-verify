@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>CBE Payment Verification</title>
+<title>Ethiopian Payment Verification</title>
 <script src="https://cdn.tailwindcss.com"></script>
 <style>
 body { background:#0b0d12; color:#e5e7eb; font-family:system-ui,-apple-system,sans-serif; }
@@ -19,6 +19,8 @@ body { background:#0b0d12; color:#e5e7eb; font-family:system-ui,-apple-system,sa
 @keyframes pulse-ring { 0%{transform:scale(.9);opacity:.7} 70%{transform:scale(1.4);opacity:0} 100%{transform:scale(.9);opacity:0} }
 .fade-in { animation:fadeIn .3s ease-out; }
 @keyframes fadeIn { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
+.bank-tab-active { background:#059669; color:#fff; }
+.bank-tab-inactive { background:#1f2937; color:#94a3b8; }
 </style>
 </head>
 <body class="min-h-screen">
@@ -31,8 +33,8 @@ body { background:#0b0d12; color:#e5e7eb; font-family:system-ui,-apple-system,sa
 </svg>
 </div>
 <div>
-<div class="font-semibold text-white">CBE Verify</div>
-<div class="text-xs text-gray-500">Ethiopian payment verification</div>
+<div class="font-semibold text-white">Ethiopian Payment Verify</div>
+<div class="text-xs text-gray-500">CBE + Telebirr</div>
 </div>
 </div>
 <a href="/api/api-keys" target="_blank" class="text-sm text-gray-400 hover:text-white">API Keys</a>
@@ -53,18 +55,18 @@ body { background:#0b0d12; color:#e5e7eb; font-family:system-ui,-apple-system,sa
 </div>
 
 <div class="flex gap-2 mb-4">
-<button data-tab="sms" class="tab-btn tab-active px-4 py-2 rounded-lg text-sm font-medium transition">Paste SMS</button>
-<button data-tab="ref" class="tab-btn tab-inactive px-4 py-2 rounded-lg text-sm font-medium transition">Reference + Suffix</button>
-<button data-tab="url" class="tab-btn tab-inactive px-4 py-2 rounded-lg text-sm font-medium transition">Receipt URL</button>
+<button data-tab="sms" class="tab-btn tab-active px-4 py-2 rounded-lg text-sm font-medium transition">CBE SMS</button>
+<button data-tab="ref" class="tab-btn tab-inactive px-4 py-2 rounded-lg text-sm font-medium transition">CBE Ref + Suffix</button>
+<button data-tab="url" class="tab-btn tab-inactive px-4 py-2 rounded-lg text-sm font-medium transition">CBE URL</button>
+<button data-tab="telebirrSms" class="tab-btn tab-inactive px-4 py-2 rounded-lg text-sm font-medium transition">Telebirr SMS</button>
+<button data-tab="telebirrRef" class="tab-btn tab-inactive px-4 py-2 rounded-lg text-sm font-medium transition">Telebirr Ref</button>
 </div>
 
 <div id="tab-sms" class="tab-panel">
 <div class="card rounded-2xl p-6">
 <label class="text-sm font-medium text-gray-300 block mb-2">Paste the CBE confirmation SMS</label>
 <textarea id="smsText" rows="6" placeholder="Dear [Name] You have successfully transferred ETB..." class="input rounded-lg px-4 py-3 text-sm w-full resize-none font-mono"></textarea>
-<button id="verifySms" class="mt-4 w-full bg-purple-600 hover:bg-purple-500 text-white font-medium py-3 rounded-lg transition flex items-center justify-center gap-2">
-<span>Verify Payment</span>
-</button>
+<button id="verifySms" class="mt-4 w-full bg-purple-600 hover:bg-purple-500 text-white font-medium py-3 rounded-lg transition">Verify CBE Payment</button>
 </div>
 </div>
 
@@ -78,8 +80,7 @@ body { background:#0b0d12; color:#e5e7eb; font-family:system-ui,-apple-system,sa
 <label class="text-sm font-medium text-gray-300 block mb-2">Account suffix (8 digits)</label>
 <input id="refSuffix" type="text" placeholder="35207333" class="input rounded-lg px-4 py-2.5 text-sm w-full font-mono" />
 </div>
-<button id="verifyRef" class="w-full bg-purple-600 hover:bg-purple-500 text-white font-medium py-3 rounded-lg transition">Verify Payment</button>
-<p class="text-xs text-gray-500">Note: the old CBE receipt endpoint may be unavailable. SMS is the recommended flow.</p>
+<button id="verifyRef" class="w-full bg-purple-600 hover:bg-purple-500 text-white font-medium py-3 rounded-lg transition">Verify CBE Payment</button>
 </div>
 </div>
 
@@ -89,8 +90,25 @@ body { background:#0b0d12; color:#e5e7eb; font-family:system-ui,-apple-system,sa
 <label class="text-sm font-medium text-gray-300 block mb-2">CBE receipt URL</label>
 <input id="receiptUrl" type="text" placeholder="https://mbreciept.cbe.com.et/v2-..." class="input rounded-lg px-4 py-2.5 text-sm w-full font-mono" />
 </div>
-<button id="verifyUrl" class="w-full bg-purple-600 hover:bg-purple-500 text-white font-medium py-3 rounded-lg transition">Verify Payment</button>
-<p class="text-xs text-gray-500">Requires a headless browser. Slower than SMS.</p>
+<button id="verifyUrl" class="w-full bg-purple-600 hover:bg-purple-500 text-white font-medium py-3 rounded-lg transition">Verify CBE Payment</button>
+</div>
+</div>
+
+<div id="tab-telebirrSms" class="tab-panel hidden">
+<div class="card rounded-2xl p-6">
+<label class="text-sm font-medium text-gray-300 block mb-2">Paste the Telebirr SMS from 127</label>
+<textarea id="telebirrSmsText" rows="6" placeholder="Dear [Name] You have transferred ETB ... Thank you for using telebirr" class="input rounded-lg px-4 py-3 text-sm w-full resize-none font-mono"></textarea>
+<button id="verifyTelebirrSms" class="mt-4 w-full bg-emerald-600 hover:bg-emerald-500 text-white font-medium py-3 rounded-lg transition">Verify Telebirr Payment</button>
+</div>
+</div>
+
+<div id="tab-telebirrRef" class="tab-panel hidden">
+<div class="card rounded-2xl p-6 space-y-4">
+<div>
+<label class="text-sm font-medium text-gray-300 block mb-2">Telebirr transaction number</label>
+<input id="telebirrRef" type="text" placeholder="DIN92X87AT" class="input rounded-lg px-4 py-2.5 text-sm w-full font-mono" />
+</div>
+<button id="verifyTelebirrRef" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-medium py-3 rounded-lg transition">Verify Telebirr Payment</button>
 </div>
 </div>
 
