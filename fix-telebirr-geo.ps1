@@ -1,3 +1,44 @@
+$ErrorActionPreference = "Stop"
+$root = "C:\Users\Dagi\Desktop\cbe-verify-api"
+Set-Location $root
+
+function W($rel, $content) {
+    $full = Join-Path $root $rel
+    $dir = Split-Path $full -Parent
+    if ($dir -and -not (Test-Path $dir)) { New-Item -ItemType Directory -Force -Path $dir | Out-Null }
+    [System.IO.File]::WriteAllText($full, $content, [System.Text.UTF8Encoding]::new($false))
+    Write-Host "  wrote: $rel" -ForegroundColor Cyan
+}
+
+Write-Host "`n=== Writing env.ts (adds Telebirr proxy + timeout) ===" -ForegroundColor Yellow
+W "src\config\env.ts" @'
+import 'dotenv/config';
+
+function required(name: string, fallback?: string): string {
+  const v = process.env[name] ?? fallback;
+  if (!v) throw new Error('Missing env variable: ' + name);
+  return v;
+}
+
+export const env = {
+  port: Number(process.env.PORT ?? 3000),
+  nodeEnv: process.env.NODE_ENV ?? 'development',
+  adminApiKey: required('ADMIN_API_KEY'),
+  cbeReceiptBase: required('CBE_RECEIPT_BASE', 'https://apps.cbe.com.et:100/'),
+  cbeMobileReceiptBase: required('CBE_MOBILE_RECEIPT_BASE', 'https://mbreciept.cbe.com.et/'),
+  cbeTimeoutMs: Number(process.env.CBE_RECEIPT_TIMEOUT_MS ?? 20000),
+  cbeAllowInsecureTls: process.env.CBE_ALLOW_INSECURE_TLS === 'true',
+  webhookSigningSecret: process.env.WEBHOOK_SIGNING_SECRET ?? '',
+  dbPath: process.env.DB_PATH ?? './data/verify.db',
+  // Telebirr — geo-blocked to Ethiopian IPs. Set TELEBIRR_PROXY_URL to route via an Ethiopian relay.
+  telebirrProxyUrl: process.env.TELEBIRR_PROXY_URL ?? '',
+  telebirrProxySecret: process.env.TELEBIRR_PROXY_SECRET ?? '',
+  telebirrFetchTimeoutMs: Number(process.env.TELEBIRR_FETCH_TIMEOUT_MS ?? 8000),
+};
+'@
+
+Write-Host "`n=== Writing telebirrScraper.ts (graceful geo-block handling) ===" -ForegroundColor Yellow
+W "src\services\telebirrScraper.ts" @'
 import axios, { AxiosInstance } from 'axios';
 import * as cheerio from 'cheerio';
 import https from 'node:https';
@@ -77,7 +118,7 @@ export async function fetchTelebirrReceipt(input: string): Promise<TelebirrRecei
 }
 
 // -------------------------------------------------------------
-// SMS parser â€” works from ANYWHERE, no network
+// SMS parser — works from ANYWHERE, no network
 // -------------------------------------------------------------
 
 export function parseTelebirrSms(text: string): TelebirrReceipt {
@@ -132,7 +173,7 @@ export function parseTelebirrSms(text: string): TelebirrReceipt {
   return result;
 }
 
-// SMS path â€” always returns SMS data. URL enrichment is best-effort with a short timeout.
+// SMS path — always returns SMS data. URL enrichment is best-effort with a short timeout.
 async function fetchFromSms(text: string): Promise<TelebirrReceipt> {
   const smsResult = parseTelebirrSms(text);
   if (smsResult.status !== 'success' || !smsResult.referenceNumber) return smsResult;
@@ -159,7 +200,7 @@ async function fetchFromSms(text: string): Promise<TelebirrReceipt> {
       merged.source = 'html';
       return merged;
     }
-  } catch { /* ignore â€” SMS data is enough */ }
+  } catch { /* ignore — SMS data is enough */ }
 
   return smsResult;
 }
@@ -275,7 +316,7 @@ export function parseTelebirrHtml(referenceNumber: string, html: string): Telebi
   if (Object.keys(fields).length === 0) {
     $('div, p, li, span, section').each((_, el) => {
       const t = clean($(el).text());
-      const m = t.match(/^([A-Za-z][A-Za-z0-9 /_-]{2,40}?)\s*[:ï¼š]\s*(.+)$/);
+      const m = t.match(/^([A-Za-z][A-Za-z0-9 /_-]{2,40}?)\s*[:：]\s*(.+)$/);
       if (m) {
         const k = normalize(m[1]);
         if (!fields[k]) fields[k] = clean(m[2]);
@@ -322,7 +363,7 @@ export function parseTelebirrHtml(referenceNumber: string, html: string): Telebi
 }
 
 function normalize(s: string): string {
-  return s.toLowerCase().replace(/\s+/g, ' ').replace(/[:ï¼š]\s*$/, '').trim();
+  return s.toLowerCase().replace(/\s+/g, ' ').replace(/[:：]\s*$/, '').trim();
 }
 function clean(s: string): string {
   return s.replace(/\s+/g, ' ').trim();
@@ -333,3 +374,132 @@ function parseAmount(s: string): number | undefined {
   const n = Number(cleaned);
   return Number.isFinite(n) ? n : undefined;
 }
+'@
+
+Write-Host "`n=== Writing telebirr-relay.js (deploy on Ethiopian VPS) ===" -ForegroundColor Yellow
+W "telebirr-relay.js" @'
+// telebirr-relay.js
+// Small HTTP relay that MUST run on a server inside Ethiopia with an Ethio Telecom
+// network connection. Routes Telebirr receipt fetches from your main API (which
+// can be anywhere) through an Ethiopian IP.
+//
+// Deploy:  node telebirr-relay.js
+// Env:     PORT=4000  RELAY_SECRET=change_me
+// Usage:   https://your-main-api.com fetches  http://your-ethiopian-relay:4000/relay?url=<encoded>
+//
+// Then in your main API's .env:
+//   TELEBIRR_PROXY_URL=http://your-ethiopian-relay:4000/relay
+//   TELEBIRR_PROXY_SECRET=change_me
+
+const http = require('http');
+const https = require('https');
+const { URL } = require('url');
+
+const PORT = Number(process.env.PORT || 4000);
+const SECRET = process.env.RELAY_SECRET || '';
+
+const ALLOWED_HOST = 'transactioninfo.ethiotelecom.et';
+
+const server = http.createServer((req, res) => {
+  const reqUrl = new URL(req.url, 'http://localhost:' + PORT);
+
+  if (reqUrl.pathname === '/health') {
+    res.writeHead(200, { 'content-type': 'application/json' });
+    return res.end(JSON.stringify({ ok: true }));
+  }
+
+  if (reqUrl.pathname !== '/relay') {
+    res.writeHead(404);
+    return res.end('Not found. Use /relay?url=<encoded>');
+  }
+
+  if (SECRET && req.headers['x-relay-secret'] !== SECRET) {
+    res.writeHead(401);
+    return res.end('Unauthorized');
+  }
+
+  const targetUrl = reqUrl.searchParams.get('url');
+  if (!targetUrl) {
+    res.writeHead(400);
+    return res.end('Missing ?url=');
+  }
+
+  let parsed;
+  try {
+    parsed = new URL(targetUrl);
+  } catch {
+    res.writeHead(400);
+    return res.end('Invalid URL');
+  }
+
+  if (parsed.hostname !== ALLOWED_HOST) {
+    res.writeHead(403);
+    return res.end('Only ' + ALLOWED_HOST + ' is allowed');
+  }
+
+  https
+    .get(targetUrl, { headers: { 'User-Agent': 'Mozilla/5.0 TelebirrRelay/1.0' } }, (upstream) => {
+      res.writeHead(upstream.statusCode || 502, {
+        'content-type': upstream.headers['content-type'] || 'text/html',
+      });
+      upstream.pipe(res);
+    })
+    .on('error', (e) => {
+      res.writeHead(502);
+      res.end('Upstream error: ' + e.message);
+    });
+});
+
+server.listen(PORT, () => {
+  console.log('Telebirr relay listening on port ' + PORT);
+  console.log('Deploy this on an Ethio Telecom network server.');
+  console.log('Then set TELEBIRR_PROXY_URL on your main API.');
+});
+'@
+
+Write-Host "`n=== Updating .env.example ===" -ForegroundColor Yellow
+W ".env.example" @'
+PORT=3000
+NODE_ENV=development
+ADMIN_API_KEY=change_me_to_a_long_random_string
+CBE_RECEIPT_BASE=https://apps.cbe.com.et:100/
+CBE_MOBILE_RECEIPT_BASE=https://mbreciept.cbe.com.et/
+CBE_RECEIPT_TIMEOUT_MS=20000
+CBE_ALLOW_INSECURE_TLS=true
+WEBHOOK_SIGNING_SECRET=change_me_webhook_secret
+DB_PATH=./data/verify.db
+
+# Telebirr receipt URLs are geo-blocked to Ethiopian IPs.
+# SMS-based Telebirr verification works from anywhere - no proxy needed.
+# To enable URL-based Telebirr lookup, deploy telebirr-relay.js on an
+# Ethiopian server and set these:
+TELEBIRR_PROXY_URL=
+TELEBIRR_PROXY_SECRET=
+TELEBIRR_FETCH_TIMEOUT_MS=8000
+'@
+
+Write-Host "`n=== Updating .env (local) ===" -ForegroundColor Yellow
+W ".env" @'
+PORT=3000
+NODE_ENV=development
+ADMIN_API_KEY=cbe_admin_local_dev_key_change_me
+CBE_RECEIPT_BASE=https://apps.cbe.com.et:100/
+CBE_MOBILE_RECEIPT_BASE=https://mbreciept.cbe.com.et/
+CBE_RECEIPT_TIMEOUT_MS=20000
+CBE_ALLOW_INSECURE_TLS=true
+WEBHOOK_SIGNING_SECRET=change_me_webhook_secret
+DB_PATH=./data/verify.db
+TELEBIRR_PROXY_URL=
+TELEBIRR_PROXY_SECRET=
+TELEBIRR_FETCH_TIMEOUT_MS=8000
+'@
+
+Write-Host "`n=== All files written ===" -ForegroundColor Green
+
+Write-Host "`n=== Git add + commit + push ===" -ForegroundColor Yellow
+git add .
+git commit -m "Handle Telebirr geo-blocking: optional Ethiopian proxy relay, short fetch timeout, clear error messages"
+git push
+
+Write-Host "`n=== DONE ===" -ForegroundColor Green
+Write-Host "`nRestart server (Ctrl+C then npm run dev) and run: node test-api.js" -ForegroundColor Cyan
