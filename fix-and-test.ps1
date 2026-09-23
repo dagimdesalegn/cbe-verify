@@ -1,3 +1,15 @@
+$ErrorActionPreference = "Stop"
+$root = "C:\Users\Dagi\Desktop\cbe-verify-api"
+Set-Location $root
+
+function W($rel, $content) {
+    $full = Join-Path $root $rel
+    [System.IO.File]::WriteAllText($full, $content, [System.Text.UTF8Encoding]::new($false))
+    Write-Host "  wrote: $rel" -ForegroundColor Cyan
+}
+
+Write-Host "`n=== Writing telebirrScraper.ts ===" -ForegroundColor Yellow
+W "src\services\telebirrScraper.ts" @'
 import axios, { AxiosInstance } from 'axios';
 import * as cheerio from 'cheerio';
 import https from 'node:https';
@@ -203,7 +215,7 @@ export function parseTelebirrHtml(referenceNumber: string, html: string): Telebi
   if (Object.keys(fields).length === 0) {
     $('div, p, li, span, section').each((_, el) => {
       const t = clean($(el).text());
-      const m = t.match(/^([A-Za-z][A-Za-z0-9 /_-]{2,40}?)\s*[:ï¼š]\s*(.+)$/);
+      const m = t.match(/^([A-Za-z][A-Za-z0-9 /_-]{2,40}?)\s*[:：]\s*(.+)$/);
       if (m) { const k = norm(m[1]); if (!fields[k]) fields[k] = clean(m[2]); }
     });
   }
@@ -231,7 +243,7 @@ export function parseTelebirrHtml(referenceNumber: string, html: string): Telebi
   return r;
 }
 
-function norm(s: string): string { return s.toLowerCase().replace(/\s+/g, ' ').replace(/[:ï¼š]\s*$/, '').trim(); }
+function norm(s: string): string { return s.toLowerCase().replace(/\s+/g, ' ').replace(/[:：]\s*$/, '').trim(); }
 function clean(s: string): string { return s.replace(/\s+/g, ' ').trim(); }
 function parseAmount(s: string): number | undefined {
   if (!s) return undefined;
@@ -239,3 +251,41 @@ function parseAmount(s: string): number | undefined {
   const n = Number(c);
   return Number.isFinite(n) ? n : undefined;
 }
+'@
+
+Write-Host "`n=== Writing test-telebirr-direct.js ===" -ForegroundColor Yellow
+W "test-telebirr-direct.js" @'
+require('tsx/cjs');
+const { fetchTelebirrReceipt } = require('./src/services/telebirrScraper.ts');
+const fs = require('fs');
+
+(async () => {
+  const ref = process.argv[2] || 'DIN92X87AT';
+  console.log('Testing Telebirr receipt:', ref);
+  const start = Date.now();
+  const result = await fetchTelebirrReceipt(ref);
+  console.log('\n=== RESULT (' + (Date.now() - start) + 'ms) ===');
+  console.log(JSON.stringify(result, null, 2));
+
+  const f = './debug-receipts/telebirr_' + ref + '.html';
+  if (fs.existsSync(f)) {
+    const html = fs.readFileSync(f, 'utf8');
+    console.log('\n=== HTML saved: ' + html.length + ' bytes ===');
+    const text = html.replace(/<script[\s\S]*?<\/script>/gi, '').replace(/<style[\s\S]*?<\/style>/gi, '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+    console.log('First 1500 chars of visible text:');
+    console.log(text.slice(0, 1500));
+  }
+  process.exit(0);
+})().catch(e => { console.error('FATAL:', e?.stack ?? e); process.exit(1); });
+'@
+
+Write-Host "`n=== Files written. Now testing Telebirr URL ===" -ForegroundColor Green
+Write-Host "`n" -NoNewline
+node test-telebirr-direct.js DIN92X87AT
+
+Write-Host "`n=== Committing and pushing ===" -ForegroundColor Yellow
+git add .
+git commit -m "Fix Telebirr URL fetch: desktop UA + Client Hints, app UA fallback, IPv6-first"
+git push
+
+Write-Host "`n=== DONE ===" -ForegroundColor Green
