@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>CBE Payment Verification</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+body { background:#0b0d12; color:#e5e7eb; font-family:system-ui,-apple-system,sans-serif; }
+.card { background:linear-gradient(160deg,#131722 0%,#0d1018 100%); border:1px solid #1f2937; }
+.input { background:#0a0d14; border:1px solid #1f2937; }
+.input:focus { border-color:#7c3aed; outline:none; box-shadow:0 0 0 3px rgba(124,58,237,.15); }
+.tab-active { background:#7c3aed; color:#fff; }
+.tab-inactive { color:#94a3b8; }
+.tab-inactive:hover { color:#e5e7eb; }
+.spinner { animation:spin 1s linear infinite; }
+@keyframes spin { from{transform:rotate(0)} to{transform:rotate(360deg)} }
+.pulse-ring { animation:pulse-ring 1.5s ease-out infinite; }
+@keyframes pulse-ring { 0%{transform:scale(.9);opacity:.7} 70%{transform:scale(1.4);opacity:0} 100%{transform:scale(.9);opacity:0} }
+.fade-in { animation:fadeIn .3s ease-out; }
+@keyframes fadeIn { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
+</style>
+</head>
+<body class="min-h-screen">
+<header class="border-b border-gray-800">
+<div class="max-w-5xl mx-auto px-6 py-4 flex items-center justify-between">
+<div class="flex items-center gap-3">
+<div class="w-9 h-9 rounded-lg bg-gradient-to-br from-purple-600 to-purple-800 flex items-center justify-center">
+<svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/>
+</svg>
+</div>
+<div>
+<div class="font-semibold text-white">CBE Verify</div>
+<div class="text-xs text-gray-500">Ethiopian payment verification</div>
+</div>
+</div>
+<a href="/api/api-keys" target="_blank" class="text-sm text-gray-400 hover:text-white">API Keys</a>
+</div>
+</header>
+
+<main class="max-w-3xl mx-auto px-6 py-10">
+<div class="card rounded-2xl p-6 mb-6">
+<div class="flex items-center justify-between mb-3">
+<label class="text-sm font-medium text-gray-300">API Key</label>
+<span class="text-xs text-gray-500">Stored only in your browser</span>
+</div>
+<div class="flex gap-2">
+<input id="apiKey" type="password" placeholder="cbe_verify_..." class="input rounded-lg px-4 py-2.5 text-sm w-full font-mono" />
+<button id="toggleKey" class="px-3 rounded-lg border border-gray-800 hover:bg-gray-800 text-sm">Show</button>
+</div>
+<div id="keyStatus" class="text-xs mt-2 text-gray-500">Not verified</div>
+</div>
+
+<div class="flex gap-2 mb-4">
+<button data-tab="sms" class="tab-btn tab-active px-4 py-2 rounded-lg text-sm font-medium transition">Paste SMS</button>
+<button data-tab="ref" class="tab-btn tab-inactive px-4 py-2 rounded-lg text-sm font-medium transition">Reference + Suffix</button>
+<button data-tab="url" class="tab-btn tab-inactive px-4 py-2 rounded-lg text-sm font-medium transition">Receipt URL</button>
+</div>
+
+<div id="tab-sms" class="tab-panel">
+<div class="card rounded-2xl p-6">
+<label class="text-sm font-medium text-gray-300 block mb-2">Paste the CBE confirmation SMS</label>
+<textarea id="smsText" rows="6" placeholder="Dear [Name] You have successfully transferred ETB..." class="input rounded-lg px-4 py-3 text-sm w-full resize-none font-mono"></textarea>
+<button id="verifySms" class="mt-4 w-full bg-purple-600 hover:bg-purple-500 text-white font-medium py-3 rounded-lg transition flex items-center justify-center gap-2">
+<span>Verify Payment</span>
+</button>
+</div>
+</div>
+
+<div id="tab-ref" class="tab-panel hidden">
+<div class="card rounded-2xl p-6 space-y-4">
+<div>
+<label class="text-sm font-medium text-gray-300 block mb-2">Transaction reference</label>
+<input id="refNumber" type="text" placeholder="FT26262VQ6GV" class="input rounded-lg px-4 py-2.5 text-sm w-full font-mono" />
+</div>
+<div>
+<label class="text-sm font-medium text-gray-300 block mb-2">Account suffix (8 digits)</label>
+<input id="refSuffix" type="text" placeholder="35207333" class="input rounded-lg px-4 py-2.5 text-sm w-full font-mono" />
+</div>
+<button id="verifyRef" class="w-full bg-purple-600 hover:bg-purple-500 text-white font-medium py-3 rounded-lg transition">Verify Payment</button>
+<p class="text-xs text-gray-500">Note: the old CBE receipt endpoint may be unavailable. SMS is the recommended flow.</p>
+</div>
+</div>
+
+<div id="tab-url" class="tab-panel hidden">
+<div class="card rounded-2xl p-6 space-y-4">
+<div>
+<label class="text-sm font-medium text-gray-300 block mb-2">CBE receipt URL</label>
+<input id="receiptUrl" type="text" placeholder="https://mbreciept.cbe.com.et/v2-..." class="input rounded-lg px-4 py-2.5 text-sm w-full font-mono" />
+</div>
+<button id="verifyUrl" class="w-full bg-purple-600 hover:bg-purple-500 text-white font-medium py-3 rounded-lg transition">Verify Payment</button>
+<p class="text-xs text-gray-500">Requires a headless browser. Slower than SMS.</p>
+</div>
+</div>
+
+<div id="result" class="mt-6"></div>
+
+<div class="mt-10">
+<div class="flex items-center justify-between mb-3">
+<h2 class="text-sm font-medium text-gray-400">Recent verifications</h2>
+<button id="clearHistory" class="text-xs text-gray-500 hover:text-gray-300">Clear</button>
+</div>
+<div id="history" class="space-y-2"></div>
+</div>
+</main>
+
+<script src="/app.js"></script>
+</body>
+</html>
