@@ -1,4 +1,4 @@
-# Environment — NEVER commit
+﻿# Environment â€” NEVER commit
 .env
 .env.local
 .env.*.local
@@ -8,14 +8,14 @@
 # Dependencies
 node_modules/
 
-# Database — real API keys and verification data
+# Database â€” real API keys and verification data
 data/
 *.db
 *.db-shm
 *.db-wal
 *.sqlite
 
-# Debug artifacts — real receipt HTML
+# Debug artifacts â€” real receipt HTML
 debug-receipts/
 receipt-debug.html
 
