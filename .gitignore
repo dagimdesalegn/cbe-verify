@@ -112,4 +112,4 @@ test-api.js
 test-api.ps1
 install-all.ps1
 install-frontend.ps1
-create-files.ps1
+create-files.ps1\n# Test fixtures with real receipt data\ntest-fixtures.json\n

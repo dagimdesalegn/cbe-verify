@@ -1,0 +1,13 @@
+{
+  "cbe": {
+    "smsText": "Dear [Your Name] You have successfully transferred ETB[X] from account [XXXX] to account [XXXX] ([Receiver Name]). Service charge of ETB [X] and VAT(15%) of ETB[X] and Disaster Recovery(5%) of [X] with total of ETB[X]. Your current balance is ETB[X]. Thanks for Banking with CBE. https://mbreciept.cbe.com.et/v2-XXXXX",
+    "referenceNumber": "FTXXXXXXXXXX",
+    "accountSuffix": "XXXXXXXX",
+    "receiptUrl": "https://mbreciept.cbe.com.et/v2-XXXXX"
+  },
+  "telebirr": {
+    "smsText": "Dear [Your Name] You have transferred ETB [X] to [Receiver Name] ([XXXX****XXXX]) on DD/MM/YYYY HH:MM:SS. Your transaction number is XXXXXXXXXX. The service fee is ETB [X] and 15% VAT on the service fee is ETB [X]. Your current E-Money Account balance is ETB [X]. To download your payment information please click this link: https://transactioninfo.ethiotelecom.et/receipt/XXXXXXXXXX. Thank you for using telebirr",
+    "referenceNumber": "XXXXXXXXXX",
+    "receiptUrl": "https://transactioninfo.ethiotelecom.et/receipt/XXXXXXXXXX"
+  }
+}

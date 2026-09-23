@@ -1,9 +1,19 @@
+// test-telebirr-direct.js - calls the scraper directly
+const fs = require('fs');
+const path = require('path');
+
 require('tsx/cjs');
 const { fetchTelebirrReceipt } = require('./src/services/telebirrScraper.ts');
-const fs = require('fs');
+
+const fixturesPath = path.join(__dirname, 'test-fixtures.json');
+if (!fs.existsSync(fixturesPath)) {
+  console.error('Missing test-fixtures.json. Copy test-fixtures.example.json and fill it.');
+  process.exit(1);
+}
+const FIXTURES = JSON.parse(fs.readFileSync(fixturesPath, 'utf8'));
 
 (async () => {
-  const ref = process.argv[2] || 'DIN92X87AT';
+  const ref = process.argv[2] || FIXTURES.telebirr.referenceNumber;
   console.log('Testing Telebirr receipt:', ref);
   const start = Date.now();
   const result = await fetchTelebirrReceipt(ref);
@@ -14,9 +24,6 @@ const fs = require('fs');
   if (fs.existsSync(f)) {
     const html = fs.readFileSync(f, 'utf8');
     console.log('\n=== HTML saved: ' + html.length + ' bytes ===');
-    const text = html.replace(/<script[\s\S]*?<\/script>/gi, '').replace(/<style[\s\S]*?<\/style>/gi, '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
-    console.log('First 1500 chars of visible text:');
-    console.log(text.slice(0, 1500));
   }
   process.exit(0);
-})().catch(e => { console.error('FATAL:', e?.stack ?? e); process.exit(1); });
+})().catch((e) => { console.error('FATAL:', e?.stack ?? e); process.exit(1); });
