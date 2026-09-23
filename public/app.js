@@ -85,13 +85,26 @@ function showResult(res) {
   const item = res.data && res.data[0];
   if (!item) return showError(res.message || 'No data returned');
   if (item.status === 'success' && item.verified) {
-    $('result').innerHTML = '<div class="card rounded-2xl p-6 fade-in border-green-900/50"><div class="flex items-start gap-4"><div class="w-12 h-12 rounded-full bg-green-600/20 border border-green-600/40 flex items-center justify-center flex-shrink-0"><svg class="w-6 h-6 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/></svg></div><div class="flex-1"><div class="font-semibold text-green-300 text-lg">Payment Verified</div><div class="text-sm text-gray-400 mt-1">This transaction is valid and confirmed.</div><div class="grid grid-cols-2 gap-4 mt-5 text-sm">' + field('Amount', fmtAmount(item.amount, item.currency)) + field('Reference', item.referenceNumber) + field('Sender', item.senderName) + field('Receiver', item.receiverName) + field('Receiver account', item.receiverAccount) + field('Bank', item.bank) + '</div></div></div></div>';
+    let fields = '';
+    fields += field('Amount', fmtAmount(item.amount, item.currency));
+    fields += field('Reference', item.referenceNumber);
+    fields += field('Sender', item.senderName);
+    fields += field('Sender account', item.senderAccount);
+    fields += field('Receiver', item.receiverName);
+    fields += field('Receiver account', item.receiverAccount);
+    fields += field('Date', item.date);
+    fields += field('Reason', item.reason);
+    fields += field('Service charge', fmtAmount(item.serviceCharge, item.currency));
+    fields += field('VAT', fmtAmount(item.vat, item.currency));
+    fields += field('Total debited', fmtAmount(item.totalAmount, item.currency));
+    fields += field('Bank', item.bank);
+    $('result').innerHTML = '<div class="card rounded-2xl p-6 fade-in border-green-900/50"><div class="flex items-start gap-4"><div class="w-12 h-12 rounded-full bg-green-600/20 border border-green-600/40 flex items-center justify-center flex-shrink-0"><svg class="w-6 h-6 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/></svg></div><div class="flex-1"><div class="font-semibold text-green-300 text-lg">Payment Verified</div><div class="text-sm text-gray-400 mt-1">This transaction is valid and confirmed.</div><div class="grid grid-cols-2 gap-4 mt-5 text-sm">' + fields + '</div></div></div></div>';
   } else if (item.status === 'not_found') {
     $('result').innerHTML = '<div class="card rounded-2xl p-6 fade-in border-yellow-900/50"><div class="flex items-start gap-4"><div class="w-12 h-12 rounded-full bg-yellow-600/20 border border-yellow-600/40 flex items-center justify-center flex-shrink-0"><svg class="w-6 h-6 text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01"/></svg></div><div><div class="font-semibold text-yellow-300 text-lg">Not Found</div><div class="text-sm text-gray-400 mt-1">CBE did not return a receipt for this input.</div></div></div></div>';
   } else { showError(item.error || res.message || 'Verification failed'); }
 }
 function field(label, value) {
-  return '<div><div class="text-xs text-gray-500 uppercase tracking-wide">' + escapeHtml(label) + '</div><div class="text-gray-100 mt-0.5 font-mono">' + escapeHtml(value == null ? '-' : value) + '</div></div>';
+  return '<div><div class="text-xs text-gray-500 uppercase tracking-wide">' + escapeHtml(label) + '</div><div class="text-gray-100 mt-0.5 font-mono break-all">' + escapeHtml(value == null || value === '' ? '-' : value) + '</div></div>';
 }
 function fmtAmount(amount, currency) {
   if (amount == null) return '-';
@@ -108,13 +121,15 @@ function addToHistory(item) {
 function renderHistory() {
   const h = loadHistory();
   if (!h.length) { $('history').innerHTML = '<div class="text-xs text-gray-600 italic">No verifications yet</div>'; return; }
-  $('history').innerHTML = h.map((r) => '<div class="card rounded-xl px-4 py-3 flex items-center justify-between text-sm"><div class="flex items-center gap-3"><div class="w-2 h-2 rounded-full ' + (r.status === 'success' ? 'bg-green-500' : 'bg-yellow-500') + '"></div><div><div class="text-gray-200">' + escapeHtml(r.sender || '-') + ' to ' + escapeHtml(r.receiver || '-') + '</div><div class="text-xs text-gray-500 font-mono">' + escapeHtml(r.ref || '') + '</div></div></div><div class="text-right"><div class="text-gray-100">' + (r.amount ? Number(r.amount).toLocaleString() + ' ' + (r.currency || 'ETB') : '') + '</div><div class="text-xs text-gray-500">' + new Date(r.ts).toLocaleTimeString() + '</div></div></div>').join('');
+  $('history').innerHTML = h.map(function (r) {
+    return '<div class="card rounded-xl px-4 py-3 flex items-center justify-between text-sm"><div class="flex items-center gap-3"><div class="w-2 h-2 rounded-full ' + (r.status === 'success' ? 'bg-green-500' : 'bg-yellow-500') + '"></div><div><div class="text-gray-200">' + escapeHtml(r.sender || '-') + ' to ' + escapeHtml(r.receiver || '-') + '</div><div class="text-xs text-gray-500 font-mono">' + escapeHtml(r.ref || '') + '</div></div></div><div class="text-right"><div class="text-gray-100">' + (r.amount ? Number(r.amount).toLocaleString() + ' ' + (r.currency || 'ETB') : '') + '</div><div class="text-xs text-gray-500">' + new Date(r.ts).toLocaleTimeString() + '</div></div></div>';
+  }).join('');
 }
 $('clearHistory').addEventListener('click', () => { localStorage.removeItem(HISTORY_KEY); renderHistory(); });
 
 function escapeHtml(s) {
   if (s == null) return '';
-  return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  return String(s).replace(/[&<>"']/g, function (c) { return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]); });
 }
 
 loadApiKey();

@@ -11,9 +11,6 @@ export interface VerifyInput {
   reference?: string;
   accountSuffix?: string;
   suffix?: string;
-  phoneNumber?: string;
-  phone?: string;
-  settlementAccount?: string;
   webhookUrl?: string;
 }
 
@@ -26,19 +23,24 @@ export interface VerifyResult {
   amount?: number;
   currency?: string;
   senderName?: string;
+  senderAccount?: string;
   receiverName?: string;
   receiverAccount?: string;
   referenceNumber?: string;
   accountSuffix?: string;
+  date?: string;
+  reason?: string;
+  serviceCharge?: number;
+  vat?: number;
+  totalAmount?: number;
+  source?: string;
   error?: string;
 }
 
 const insertStmt = db.prepare(`
   INSERT INTO verification_requests
-    (request_id, bank, reference_number, account_suffix, phone_number,
-     settlement_account, webhook_url, idempotency_key, processing_status)
-  VALUES (@request_id, @bank, @reference_number, @account_suffix, @phone_number,
-     @settlement_account, @webhook_url, @idempotency_key, 'queued')
+    (request_id, bank, reference_number, account_suffix, webhook_url, idempotency_key, processing_status)
+  VALUES (@request_id, @bank, @reference_number, @account_suffix, @webhook_url, @idempotency_key, 'queued')
 `);
 
 const updateStmt = db.prepare(`
@@ -75,8 +77,6 @@ export function createRequest(input: VerifyInput, idempotencyKey?: string): stri
     bank: input.bank,
     reference_number: input.referenceNumber ?? input.reference ?? null,
     account_suffix: input.accountSuffix ?? input.suffix ?? null,
-    phone_number: input.phoneNumber ?? input.phone ?? null,
-    settlement_account: input.settlementAccount ?? null,
     webhook_url: input.webhookUrl ?? null,
     idempotency_key: idempotencyKey ?? null,
   });
@@ -99,7 +99,8 @@ export async function runVerification(requestId: string, input: VerifyInput): Pr
   let result: VerifyResult;
 
   try {
-    if (input.bank !== 'cbe') throw new Error(`Unsupported bank: ${input.bank}. Only "cbe" is implemented.`);
+    if (input.bank !== 'cbe') throw new Error('Unsupported bank: ' + input.bank + '. Only cbe is implemented.');
+
     const receipt = await fetchCbeReceipt(reference, input.accountSuffix ?? input.suffix);
 
     if (receipt.status === 'not_found') {
@@ -107,15 +108,26 @@ export async function runVerification(requestId: string, input: VerifyInput): Pr
         requestId, bank: input.bank, processingStatus: 'completed',
         status: 'not_found', verified: false,
         referenceNumber: receipt.referenceNumber || reference,
+        error: receipt.error,
       };
     } else {
       result = {
         requestId, bank: input.bank, processingStatus: 'completed',
         status: 'success', verified: true,
-        amount: receipt.amount, currency: receipt.currency,
-        senderName: receipt.payerName, receiverName: receipt.receiverName,
-        receiverAccount: receipt.receiverAccount, referenceNumber: receipt.referenceNumber,
+        amount: receipt.amount,
+        currency: receipt.currency,
+        senderName: receipt.payerName,
+        senderAccount: receipt.payerAccount,
+        receiverName: receipt.receiverName,
+        receiverAccount: receipt.receiverAccount,
+        referenceNumber: receipt.referenceNumber,
         accountSuffix: input.accountSuffix ?? input.suffix,
+        date: receipt.date,
+        reason: receipt.reason,
+        serviceCharge: receipt.serviceCharge,
+        vat: receipt.vat,
+        totalAmount: receipt.totalAmount,
+        source: receipt.source,
       };
     }
 
@@ -130,7 +142,7 @@ export async function runVerification(requestId: string, input: VerifyInput): Pr
       receiver_name: result.receiverName ?? null,
       receiver_account: result.receiverAccount ?? null,
       raw_data: JSON.stringify(receipt),
-      error: null,
+      error: result.error ?? null,
     });
   } catch (err: any) {
     logger.error({ err, requestId }, 'verification failed');
@@ -148,7 +160,10 @@ export async function runVerification(requestId: string, input: VerifyInput): Pr
     });
   }
 
-  sseBus.emit(requestId, { requestId, processingStatus: result.processingStatus, status: result.status, verified: result.verified });
+  sseBus.emit(requestId, {
+    requestId, processingStatus: result.processingStatus,
+    status: result.status, verified: result.verified,
+  });
   sseBus.close(requestId, 'terminal');
 
   const row = findById.get(requestId) as any;
