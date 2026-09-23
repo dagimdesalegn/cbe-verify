@@ -1,14 +1,12 @@
 // telebirr-relay.js
-// Small HTTP relay that MUST run on a server inside Ethiopia with an Ethio Telecom
-// network connection. Routes Telebirr receipt fetches from your main API (which
-// can be anywhere) through an Ethiopian IP.
+// Deploy this on an Ethiopian server (Ethio Telecom network).
+// It proxies Telebirr receipt fetches from your main API so that
+// geo-restricted receipt URLs respond correctly.
 //
-// Deploy:  node telebirr-relay.js
-// Env:     PORT=4000  RELAY_SECRET=change_me
-// Usage:   https://your-main-api.com fetches  http://your-ethiopian-relay:4000/relay?url=<encoded>
-//
-// Then in your main API's .env:
-//   TELEBIRR_PROXY_URL=http://your-ethiopian-relay:4000/relay
+// Run:  node telebirr-relay.js
+// Env:  PORT=4000  RELAY_SECRET=change_me
+// Then set on your main API:
+//   TELEBIRR_PROXY_URL=http://your-ethiopian-server:4000/relay
 //   TELEBIRR_PROXY_SECRET=change_me
 
 const http = require('http');
@@ -17,7 +15,6 @@ const { URL } = require('url');
 
 const PORT = Number(process.env.PORT || 4000);
 const SECRET = process.env.RELAY_SECRET || '';
-
 const ALLOWED_HOST = 'transactioninfo.ethiotelecom.et';
 
 const server = http.createServer((req, res) => {
@@ -30,7 +27,7 @@ const server = http.createServer((req, res) => {
 
   if (reqUrl.pathname !== '/relay') {
     res.writeHead(404);
-    return res.end('Not found. Use /relay?url=<encoded>');
+    return res.end('Use /relay?url=<encoded>');
   }
 
   if (SECRET && req.headers['x-relay-secret'] !== SECRET) {
@@ -45,9 +42,7 @@ const server = http.createServer((req, res) => {
   }
 
   let parsed;
-  try {
-    parsed = new URL(targetUrl);
-  } catch {
+  try { parsed = new URL(targetUrl); } catch {
     res.writeHead(400);
     return res.end('Invalid URL');
   }
@@ -72,6 +67,6 @@ const server = http.createServer((req, res) => {
 
 server.listen(PORT, () => {
   console.log('Telebirr relay listening on port ' + PORT);
-  console.log('Deploy this on an Ethio Telecom network server.');
-  console.log('Then set TELEBIRR_PROXY_URL on your main API.');
+  console.log('Deploy on an Ethiopian/Ethio Telecom server.');
+  console.log('Set TELEBIRR_PROXY_URL on your main API to enable URL-based Telebirr verification.');
 });

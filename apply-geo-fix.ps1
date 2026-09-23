@@ -1,3 +1,15 @@
+$ErrorActionPreference = "Stop"
+$root = "C:\Users\Dagi\Desktop\cbe-verify-api"
+Set-Location $root
+
+function W($rel, $content) {
+    $full = Join-Path $root $rel
+    [System.IO.File]::WriteAllText($full, $content, [System.Text.UTF8Encoding]::new($false))
+    Write-Host "  wrote: $rel" -ForegroundColor Cyan
+}
+
+Write-Host "`n=== Writing telebirrScraper.ts ===" -ForegroundColor Yellow
+W "src\services\telebirrScraper.ts" @'
 import axios, { AxiosInstance } from 'axios';
 import * as cheerio from 'cheerio';
 import https from 'node:https';
@@ -79,7 +91,7 @@ export async function fetchTelebirrReceipt(input: string): Promise<TelebirrRecei
 }
 
 // -------------------------------------------------------------
-// SMS parser â€” works from anywhere, no network call
+// SMS parser — works from anywhere, no network call
 // -------------------------------------------------------------
 
 export function parseTelebirrSms(text: string): TelebirrReceipt {
@@ -150,7 +162,7 @@ async function fetchFromSms(text: string): Promise<TelebirrReceipt> {
       merged.source = 'html';
       return merged;
     }
-  } catch { /* ignore â€” SMS data is already complete */ }
+  } catch { /* ignore — SMS data is already complete */ }
 
   return smsResult;
 }
@@ -252,7 +264,7 @@ export function parseTelebirrHtml(referenceNumber: string, html: string): Telebi
   if (Object.keys(fields).length === 0) {
     $('div, p, li, span, section').each((_, el) => {
       const t = clean($(el).text());
-      const m = t.match(/^([A-Za-z][A-Za-z0-9 /_-]{2,40}?)\s*[:ï¼š]\s*(.+)$/);
+      const m = t.match(/^([A-Za-z][A-Za-z0-9 /_-]{2,40}?)\s*[:：]\s*(.+)$/);
       if (m) {
         const k = normalize(m[1]);
         if (!fields[k]) fields[k] = clean(m[2]);
@@ -297,7 +309,7 @@ export function parseTelebirrHtml(referenceNumber: string, html: string): Telebi
 }
 
 function normalize(s: string): string {
-  return s.toLowerCase().replace(/\s+/g, ' ').replace(/[:ï¼š]\s*$/, '').trim();
+  return s.toLowerCase().replace(/\s+/g, ' ').replace(/[:：]\s*$/, '').trim();
 }
 function clean(s: string): string {
   return s.replace(/\s+/g, ' ').trim();
@@ -308,3 +320,105 @@ function parseAmount(s: string): number | undefined {
   const n = Number(cleaned);
   return Number.isFinite(n) ? n : undefined;
 }
+'@
+
+Write-Host "`n=== Writing telebirr-relay.js ===" -ForegroundColor Yellow
+W "telebirr-relay.js" @'
+// telebirr-relay.js
+// Deploy this on an Ethiopian server (Ethio Telecom network).
+// It proxies Telebirr receipt fetches from your main API so that
+// geo-restricted receipt URLs respond correctly.
+//
+// Run:  node telebirr-relay.js
+// Env:  PORT=4000  RELAY_SECRET=change_me
+// Then set on your main API:
+//   TELEBIRR_PROXY_URL=http://your-ethiopian-server:4000/relay
+//   TELEBIRR_PROXY_SECRET=change_me
+
+const http = require('http');
+const https = require('https');
+const { URL } = require('url');
+
+const PORT = Number(process.env.PORT || 4000);
+const SECRET = process.env.RELAY_SECRET || '';
+const ALLOWED_HOST = 'transactioninfo.ethiotelecom.et';
+
+const server = http.createServer((req, res) => {
+  const reqUrl = new URL(req.url, 'http://localhost:' + PORT);
+
+  if (reqUrl.pathname === '/health') {
+    res.writeHead(200, { 'content-type': 'application/json' });
+    return res.end(JSON.stringify({ ok: true }));
+  }
+
+  if (reqUrl.pathname !== '/relay') {
+    res.writeHead(404);
+    return res.end('Use /relay?url=<encoded>');
+  }
+
+  if (SECRET && req.headers['x-relay-secret'] !== SECRET) {
+    res.writeHead(401);
+    return res.end('Unauthorized');
+  }
+
+  const targetUrl = reqUrl.searchParams.get('url');
+  if (!targetUrl) {
+    res.writeHead(400);
+    return res.end('Missing ?url=');
+  }
+
+  let parsed;
+  try { parsed = new URL(targetUrl); } catch {
+    res.writeHead(400);
+    return res.end('Invalid URL');
+  }
+
+  if (parsed.hostname !== ALLOWED_HOST) {
+    res.writeHead(403);
+    return res.end('Only ' + ALLOWED_HOST + ' is allowed');
+  }
+
+  https
+    .get(targetUrl, { headers: { 'User-Agent': 'Mozilla/5.0 TelebirrRelay/1.0' } }, (upstream) => {
+      res.writeHead(upstream.statusCode || 502, {
+        'content-type': upstream.headers['content-type'] || 'text/html',
+      });
+      upstream.pipe(res);
+    })
+    .on('error', (e) => {
+      res.writeHead(502);
+      res.end('Upstream error: ' + e.message);
+    });
+});
+
+server.listen(PORT, () => {
+  console.log('Telebirr relay listening on port ' + PORT);
+  console.log('Deploy on an Ethiopian/Ethio Telecom server.');
+  console.log('Set TELEBIRR_PROXY_URL on your main API to enable URL-based Telebirr verification.');
+});
+'@
+
+Write-Host "`n=== Appending Telebirr vars to .env and .env.example ===" -ForegroundColor Yellow
+
+$telebirrVars = "`nTELEBIRR_PROXY_URL=`nTELEBIRR_PROXY_SECRET=`nTELEBIRR_FETCH_TIMEOUT_MS=8000"
+
+foreach ($f in @(".env", ".env.example")) {
+    $path = Join-Path $root $f
+    if (Test-Path $path) {
+        $content = [System.IO.File]::ReadAllText($path)
+        if ($content -notmatch 'TELEBIRR_PROXY_URL') {
+            [System.IO.File]::AppendAllText($path, $telebirrVars)
+            Write-Host "  appended Telebirr vars to $f" -ForegroundColor Cyan
+        } else {
+            Write-Host "  $f already has Telebirr vars" -ForegroundColor DarkGray
+        }
+    }
+}
+
+Write-Host "`n=== Git add + commit + push ===" -ForegroundColor Yellow
+git add .
+git commit -m "Add Telebirr geo-block handling: fast-fail, clear message, optional Ethiopian relay"
+git push
+
+Write-Host "`n=== DONE ===" -ForegroundColor Green
+Write-Host "`nRestart server (Ctrl+C then npm run dev) and run: node test-api.js" -ForegroundColor Cyan
