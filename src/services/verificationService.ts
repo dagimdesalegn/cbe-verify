@@ -111,6 +111,13 @@ export async function runVerification(requestId: string, input: VerifyInput): Pr
           referenceNumber: receipt.referenceNumber || reference,
           error: receipt.error,
         };
+      } else if (receipt.status === 'failed') {
+        result = {
+          requestId, bank: input.bank, processingStatus: 'failed',
+          status: 'failed', verified: false,
+          referenceNumber: receipt.referenceNumber || reference,
+          error: receipt.error || 'Fetch failed',
+        };
       } else {
         result = {
           requestId, bank: input.bank, processingStatus: 'completed',
@@ -140,6 +147,13 @@ export async function runVerification(requestId: string, input: VerifyInput): Pr
           status: 'not_found', verified: false,
           referenceNumber: receipt.referenceNumber || reference,
           error: receipt.error,
+        };
+      } else if (receipt.status === 'failed') {
+        result = {
+          requestId, bank: input.bank, processingStatus: 'failed',
+          status: 'failed', verified: false,
+          referenceNumber: receipt.referenceNumber || reference,
+          error: receipt.error || 'Fetch failed',
         };
       } else {
         result = {

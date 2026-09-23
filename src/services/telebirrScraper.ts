@@ -90,6 +90,10 @@ export function parseTelebirrSms(text: string): TelebirrReceipt {
     currency: 'ETB',
   };
 
+  // Sender name from "Dear X You have transferred"
+  const senderMatch = flat.match(/^Dear\s+([A-Za-z][A-Za-z\s]+?)\s+You have transferred/i);
+  if (senderMatch) result.payerName = senderMatch[1].trim();
+
   // Transaction number from text or URL
   const txMatch = flat.match(/transaction number is\s+([A-Z0-9]+)/i);
   if (txMatch) result.referenceNumber = txMatch[1];
@@ -116,6 +120,12 @@ export function parseTelebirrSms(text: string): TelebirrReceipt {
   const vat = flat.match(/VAT on the service fee is ETB\s*([\d,]+\.?\d*)/i);
   if (vat) result.vat = parseAmount(vat[1]);
 
+  // Total paid (amount + fees)
+  if (result.amount !== undefined) {
+    const total = result.amount + (result.serviceFee || 0);
+    result.totalPaid = Number(total.toFixed(2));
+  }
+
   // Current balance
   const bal = flat.match(/balance is ETB\s*([\d,]+\.?\d*)/i);
   if (bal) result.currentBalance = parseAmount(bal[1]);
@@ -133,22 +143,22 @@ export function parseTelebirrSms(text: string): TelebirrReceipt {
 
 async function fetchFromSms(text: string): Promise<TelebirrReceipt> {
   const smsResult = parseTelebirrSms(text);
-  if (smsResult.status === 'success' && smsResult.referenceNumber) {
-    // Try to enrich with HTML from the receipt URL
-    const urlMatch = text.match(/https:\/\/transactioninfo\.ethiotelecom\.et\/receipt\/[A-Z0-9]+/i);
-    if (urlMatch) {
-      try {
-        const htmlResult = await fetchFromUrl(urlMatch[0]);
-        if (htmlResult.status === 'success') {
-          const merged: any = { ...smsResult };
-          for (const [k, v] of Object.entries(htmlResult)) {
-            if (v !== undefined && v !== null) merged[k] = v;
-          }
-          return merged;
+  if (smsResult.status !== 'success' || !smsResult.referenceNumber) return smsResult;
+
+  // Try to enrich from the receipt URL
+  const urlMatch = text.match(/https:\/\/transactioninfo\.ethiotelecom\.et\/receipt\/[A-Z0-9]+/i);
+  if (urlMatch) {
+    try {
+      const htmlResult = await fetchFromUrl(urlMatch[0]);
+      if (htmlResult.status === 'success' && (htmlResult.receiverName || htmlResult.amount)) {
+        const merged: any = { ...smsResult };
+        for (const [k, v] of Object.entries(htmlResult)) {
+          if (v !== undefined && v !== null && v !== '' && v !== 'none') merged[k] = v;
         }
-      } catch { /* fall through */ }
-    }
-    return smsResult;
+        merged.source = 'html';
+        return merged;
+      }
+    } catch { /* fall through */ }
   }
   return smsResult;
 }
@@ -172,16 +182,33 @@ async function fetchFromUrl(url: string): Promise<TelebirrReceipt> {
     const html = typeof res.data === 'string' ? res.data : String(res.data ?? '');
     saveDebug('telebirr_' + referenceNumber + '.html', html);
 
-    if (!html || html.length < 100) {
+    if (res.status >= 400) {
       return {
         referenceNumber,
-        status: 'not_found',
+        status: 'failed',
         source: 'none',
-        error: 'Empty response',
+        error: 'HTTP ' + res.status + ' - Telebirr may block external requests',
       };
     }
 
-    return parseTelebirrHtml(referenceNumber, html);
+    if (!html || html.length < 100) {
+      return {
+        referenceNumber,
+        status: 'failed',
+        source: 'none',
+        error: 'Empty response from Telebirr',
+      };
+    }
+
+    const parsed = parseTelebirrHtml(referenceNumber, html);
+    if (parsed.status === 'success') return parsed;
+
+    return {
+      referenceNumber,
+      status: 'not_found',
+      source: 'html',
+      error: 'Page loaded but no receipt data found',
+    };
   } catch (e: any) {
     saveDebug('telebirr_err_' + referenceNumber + '.txt', String(e?.stack ?? e));
     return {
@@ -201,7 +228,6 @@ export function parseTelebirrHtml(referenceNumber: string, html: string): Telebi
   const $ = cheerio.load(html);
   const bodyText = $('body').text().replace(/\s+/g, ' ').trim();
 
-  // Check for not-found / error pages
   if (/not found|invalid|no record|does not exist/i.test(bodyText) && bodyText.length < 500) {
     return { referenceNumber, status: 'not_found', source: 'html' };
   }
@@ -213,9 +239,7 @@ export function parseTelebirrHtml(referenceNumber: string, html: string): Telebi
     currency: 'ETB',
   };
 
-  // Strategy 1: label + value pairs across any element
   const fields: Record<string, string> = {};
-
   $('tr').each((_, row) => {
     const cells = $(row).find('td, th');
     if (cells.length < 2) return;
@@ -243,35 +267,20 @@ export function parseTelebirrHtml(referenceNumber: string, html: string): Telebi
     return undefined;
   };
 
-  const amountStr = pick(
-    'Amount',
-    'Total Paid Amount',
-    'Total Amount',
-    'Transaction Amount',
-    'Settled Amount',
-    'Paid Amount',
-  );
-
   const get = (re: RegExp): string | undefined => {
     const m = bodyText.match(re);
     return m && m[1] ? m[1].trim() : undefined;
   };
 
+  const amountStr = pick('Amount', 'Total Paid Amount', 'Total Amount', 'Transaction Amount', 'Settled Amount', 'Paid Amount');
   result.payerName = pick('Payer Name', 'Sender Name', 'Payer', 'From') ||
     get(/Payer\s*Name[:\s]+([A-Za-z][A-Za-z\s]+?)(?=\s+(?:Payer|Receiver|Credited|Payment|Amount|Invoice|$))/i);
   result.payerPhone = pick('Payer Telebirr No', 'Payer Phone', 'Sender Phone') ||
     get(/Payer\s*Telebirr\s*No[:\s]+(\d{4}\*+\d{4})/i);
-  result.receiverName = pick(
-    'Credited Party Name',
-    'Receiver Name',
-    'Beneficiary Name',
-    'To',
-  ) || get(/Credited\s*Party\s*Name[:\s]+([A-Za-z][A-Za-z\s]+?)(?=\s+(?:Payer|Receiver|Credited|Payment|Amount|Invoice|$))/i);
-  result.receiverAccount = pick(
-    'Credited Party Account No',
-    'Receiver Account',
-    'Beneficiary Account',
-  ) || get(/Credited\s*Party\s*Account\s*No[:\s]+(\d{4}\*+\d{4})/i);
+  result.receiverName = pick('Credited Party Name', 'Receiver Name', 'Beneficiary Name', 'To') ||
+    get(/Credited\s*Party\s*Name[:\s]+([A-Za-z][A-Za-z\s]+?)(?=\s+(?:Payer|Receiver|Credited|Payment|Amount|Invoice|$))/i);
+  result.receiverAccount = pick('Credited Party Account No', 'Receiver Account', 'Beneficiary Account') ||
+    get(/Credited\s*Party\s*Account\s*No[:\s]+(\d{4}\*+\d{4})/i);
   result.amount = amountStr ? parseAmount(amountStr) : undefined;
   result.serviceFee = parseAmount(pick('Service Fee', 'Service Charge', 'Fee') ?? '') ?? undefined;
   result.vat = parseAmount(pick('VAT', 'Tax') ?? '') ?? undefined;
@@ -285,7 +294,6 @@ export function parseTelebirrHtml(referenceNumber: string, html: string): Telebi
   if (meaningful < 2) {
     return { referenceNumber, status: 'not_found', source: 'html' };
   }
-
   return result;
 }
 
