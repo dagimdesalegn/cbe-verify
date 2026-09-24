@@ -3,13 +3,13 @@ requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "cbe-verify"
+name = "ethio-pay-verify"
 version = "1.0.0"
-description = "Official Python SDK for the Ethiopian Payment Verification API"
+description = "Official Python SDK for Ethiopian payment verification (CBE, Telebirr, BOA, Dashen, M-Pesa)"
 readme = "README.md"
 license = { text = "MIT" }
 requires-python = ">=3.8"
 dependencies = ["httpx>=0.24"]
 
 [project.urls]
-Homepage = "https://github.com/dagimdesalegn/cbe-verify"
+Homepage = "https://github.com/dagimdesalegn/ethio-pay-verify"

@@ -3,7 +3,7 @@ version: "3.9"
 services:
   api:
     build: .
-    container_name: cbe-verify-api
+    container_name: ethio-pay-verify-api
     restart: unless-stopped
     environment:
       - NODE_ENV=production
@@ -25,7 +25,7 @@ services:
 
   nginx:
     image: nginx:alpine
-    container_name: cbe-verify-nginx
+    container_name: ethio-pay-verify-nginx
     restart: unless-stopped
     ports:
       - "80:80"

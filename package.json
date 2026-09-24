@@ -1,7 +1,7 @@
 {
-  "name": "cbe-verify-api",
+  "name": "ethio-pay-verify",
   "version": "1.0.0",
-  "description": "Ethiopian bank payment verification API",
+  "description": "Verify Ethiopian payments from CBE, Telebirr, BOA, Dashen, M-Pesa",
   "main": "dist/index.js",
   "scripts": {
     "dev": "tsx watch src/index.ts",

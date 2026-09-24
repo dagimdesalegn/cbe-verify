@@ -1,7 +1,7 @@
 {
-  "name": "@cbe-verify/sdk",
+  "name": "ethio-pay-verify",
   "version": "1.0.0",
-  "description": "Official TypeScript SDK for Ethiopian payment verification",
+  "description": "Official TypeScript SDK for Ethiopian payment verification (CBE, Telebirr, BOA, Dashen, M-Pesa)",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "files": ["dist", "README.md"],

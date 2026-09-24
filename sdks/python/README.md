@@ -1,14 +1,14 @@
-# cbe-verify (Python SDK)
+# ethio-pay-verify (Python SDK)
 
 Official Python SDK for the Ethiopian Payment Verification API.
 
 ## Install
 
-    pip install cbe-verify
+    pip install ethio-pay-verify
 
 ## Usage
 
-    from cbe_verify import CbeVerifyClient
+    from ethio_pay_verify import CbeVerifyClient
 
     client = CbeVerifyClient(api_key="cbe_verify_your_key", base_url="http://localhost:3000")
 

@@ -1,4 +1,4 @@
-# @cbe-verify/sdk
+# ethio-pay-verify
 
 Official TypeScript/JavaScript SDK for the Ethiopian Payment Verification API.
 
@@ -6,12 +6,12 @@ Verifies payments from CBE, Telebirr, Bank of Abyssinia (BOA), Dashen Bank, and 
 
 ## Install
 
-npm install @cbe-verify/sdk
+npm install ethio-pay-verify
 
 ## Usage
 
 ```typescript
-import { CbeVerifyClient } from '@cbe-verify/sdk';
+import { CbeVerifyClient } from 'ethio-pay-verify';
 
 const client = new CbeVerifyClient({
   apiKey: process.env.CBE_VERIFY_API_KEY!,
