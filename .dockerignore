@@ -1,0 +1,14 @@
+node_modules
+dist
+data
+debug-receipts
+.env
+.env.local
+*.log
+.git
+.gitignore
+sdks
+test-*.js
+test-fixtures.json
+telebirr-relay.js
+*.ps1

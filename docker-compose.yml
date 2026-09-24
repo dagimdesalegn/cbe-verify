@@ -1,0 +1,43 @@
+version: "3.9"
+
+services:
+  api:
+    build: .
+    container_name: cbe-verify-api
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - ADMIN_API_KEY=${ADMIN_API_KEY}
+      - CBE_RECEIPT_BASE=https://apps.cbe.com.et:100/
+      - CBE_MOBILE_RECEIPT_BASE=https://mbreciept.cbe.com.et/
+      - CBE_RECEIPT_TIMEOUT_MS=20000
+      - CBE_ALLOW_INSECURE_TLS=true
+      - WEBHOOK_SIGNING_SECRET=${WEBHOOK_SIGNING_SECRET}
+      - DB_PATH=/app/data/verify.db
+      - TELEBIRR_PROXY_URL=${TELEBIRR_PROXY_URL:-}
+      - TELEBIRR_PROXY_SECRET=${TELEBIRR_PROXY_SECRET:-}
+      - TELEBIRR_FETCH_TIMEOUT_MS=15000
+    volumes:
+      - ./data:/app/data
+    networks:
+      - cbe-net
+
+  nginx:
+    image: nginx:alpine
+    container_name: cbe-verify-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./deploy/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./deploy/certs:/etc/nginx/certs:ro
+    depends_on:
+      - api
+    networks:
+      - cbe-net
+
+networks:
+  cbe-net:
+    driver: bridge

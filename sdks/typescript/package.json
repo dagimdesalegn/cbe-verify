@@ -1,0 +1,19 @@
+{
+  "name": "@cbe-verify/sdk",
+  "version": "1.0.0",
+  "description": "Official TypeScript SDK for Ethiopian payment verification",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": ["dist", "README.md"],
+  "scripts": {
+    "build": "tsc",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": ["ethiopia", "cbe", "telebirr", "payment", "verification", "fintech"],
+  "license": "MIT",
+  "engines": { "node": ">=18" },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.6.3"
+  }
+}

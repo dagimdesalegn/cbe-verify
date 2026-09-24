@@ -1,0 +1,6 @@
+FROM node:20-alpine
+WORKDIR /app
+COPY telebirr-relay.js .
+ENV PORT=4000
+EXPOSE 4000
+CMD ["node", "telebirr-relay.js"]

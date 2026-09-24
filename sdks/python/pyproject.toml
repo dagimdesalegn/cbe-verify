@@ -1,0 +1,15 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cbe-verify"
+version = "1.0.0"
+description = "Official Python SDK for the Ethiopian Payment Verification API"
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.8"
+dependencies = ["httpx>=0.24"]
+
+[project.urls]
+Homepage = "https://github.com/dagimdesalegn/cbe-verify"
