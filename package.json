@@ -1,7 +1,7 @@
 {
-  "name": "ethio-pay-verify",
+  "name": "ethio-pay-verify-api",
   "version": "1.0.0",
-  "description": "Verify Ethiopian payments from CBE, Telebirr, BOA, Dashen, M-Pesa",
+  "description": "Ethiopian payment verification API — CBE, Telebirr, BOA, Dashen, M-Pesa",
   "main": "dist/index.js",
   "scripts": {
     "dev": "tsx watch src/index.ts",
@@ -9,7 +9,17 @@
     "start": "node dist/index.js",
     "test": "node test-api.js"
   },
-  "keywords": ["ethiopia","cbe","payment-verification","fintech"],
+  "keywords": [
+    "ethiopia",
+    "cbe",
+    "telebirr",
+    "boa",
+    "dashen",
+    "mpesa",
+    "payment-verification",
+    "fintech",
+    "api"
+  ],
   "license": "MIT",
   "type": "commonjs",
   "dependencies": {
@@ -35,5 +45,9 @@
     "@types/uuid": "^10.0.0",
     "tsx": "^4.23.15",
     "typescript": "^5.6.3"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/dagimdesalegn/ethio-pay-verify.git"
   }
 }
