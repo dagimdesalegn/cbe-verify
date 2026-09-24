@@ -9,5 +9,17 @@
     "smsText": "Dear [Your Name] You have transferred ETB [X] to [Receiver Name] ([XXXX****XXXX]) on DD/MM/YYYY HH:MM:SS. Your transaction number is XXXXXXXXXX. The service fee is ETB [X] and 15% VAT on the service fee is ETB [X]. Your current E-Money Account balance is ETB [X]. To download your payment information please click this link: https://transactioninfo.ethiotelecom.et/receipt/XXXXXXXXXX. Thank you for using telebirr",
     "referenceNumber": "XXXXXXXXXX",
     "receiptUrl": "https://transactioninfo.ethiotelecom.et/receipt/XXXXXXXXXX"
+  },
+  "boa": {
+    "referenceNumber": "FTXXXXXXXXXX",
+    "accountSuffix": "XXXXX"
+  },
+  "dashen": {
+    "referenceNumber": "XXXXXXXXXXXXXXXXX"
+  },
+  "mpesa": {
+    "smsText": "Dear [Your Name], [X] ብር ለ[Receiver Name] [XXXXXX***XXX] በ [Date] ላይ ልከዋል። የገንዘብ ዝውውር መለያ ቁጥር XXXXXXXXXX ነው። የአገልግሎት ክፍያ [X] ብር ነው። አሁን ያልዎት የM-PESA ቀሪ ሒሳብ [X] ብር ነው። ደረሰኝዎን በዚህ ያግኙ፡ https://m-pesabusiness.safaricom.et/receipt/XXXXXXXXXX",
+    "referenceNumber": "XXXXXXXXXX",
+    "receiptUrl": "https://m-pesabusiness.safaricom.et/receipt/XXXXXXXXXX"
   }
 }

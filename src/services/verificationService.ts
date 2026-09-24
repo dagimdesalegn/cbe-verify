@@ -2,6 +2,9 @@ import { randomUUID } from 'node:crypto';
 import { db } from '../db';
 import { fetchCbeReceipt } from './cbeScraper';
 import { fetchTelebirrReceipt } from './telebirrScraper';
+import { fetchBoaReceipt } from './boaScraper';
+import { fetchDashenReceipt } from './dashenScraper';
+import { fetchMpesaReceipt } from './mpesaScraper';
 import { deliverWebhook } from './webhookService';
 import { sseBus } from './sseBus';
 import { logger } from '../utils/logger';
@@ -35,6 +38,7 @@ export interface VerifyResult {
   vat?: number;
   totalAmount?: number;
   source?: string;
+  geoBlocked?: boolean;
   error?: string;
 }
 
@@ -84,25 +88,38 @@ export function createRequest(input: VerifyInput, idempotencyKey?: string): stri
   return requestId;
 }
 
-export async function runVerification(requestId: string, input: VerifyInput): Promise<VerifyResult> {
+export async function runVerification(
+  requestId: string,
+  input: VerifyInput,
+): Promise<VerifyResult> {
   updateStmt.run({
     request_id: requestId,
     processing_status: 'running',
     status: 'pending',
     verified: 0,
-    amount: null, currency: null,
-    sender_name: null, receiver_name: null, receiver_account: null,
-    raw_data: null, error: null,
+    amount: null,
+    currency: null,
+    sender_name: null,
+    receiver_name: null,
+    receiver_account: null,
+    raw_data: null,
+    error: null,
   });
-  sseBus.emit(requestId, { requestId, processingStatus: 'running', status: 'pending', verified: false });
+  sseBus.emit(requestId, {
+    requestId,
+    processingStatus: 'running',
+    status: 'pending',
+    verified: false,
+  });
 
   const reference = input.referenceNumber ?? input.reference ?? '';
   const bank = input.bank.toLowerCase();
+  const suffix = input.accountSuffix ?? input.suffix;
   let result: VerifyResult;
 
   try {
     if (bank === 'cbe') {
-      const receipt = await fetchCbeReceipt(reference, input.accountSuffix ?? input.suffix);
+      const receipt = await fetchCbeReceipt(reference, suffix);
 
       if (receipt.status === 'not_found') {
         result = {
@@ -129,7 +146,7 @@ export async function runVerification(requestId: string, input: VerifyInput): Pr
           receiverName: receipt.receiverName,
           receiverAccount: receipt.receiverAccount,
           referenceNumber: receipt.referenceNumber,
-          accountSuffix: input.accountSuffix ?? input.suffix,
+          accountSuffix: suffix,
           date: receipt.date,
           reason: receipt.reason,
           serviceCharge: receipt.serviceCharge,
@@ -153,6 +170,7 @@ export async function runVerification(requestId: string, input: VerifyInput): Pr
           requestId, bank: input.bank, processingStatus: 'failed',
           status: 'failed', verified: false,
           referenceNumber: receipt.referenceNumber || reference,
+          geoBlocked: receipt.geoBlocked,
           error: receipt.error || 'Fetch failed',
         };
       } else {
@@ -173,8 +191,112 @@ export async function runVerification(requestId: string, input: VerifyInput): Pr
           source: receipt.source,
         };
       }
+    } else if (bank === 'boa') {
+      const receipt = await fetchBoaReceipt(reference, suffix);
+
+      if (receipt.status === 'not_found') {
+        result = {
+          requestId, bank: input.bank, processingStatus: 'completed',
+          status: 'not_found', verified: false,
+          referenceNumber: receipt.referenceNumber || reference,
+          error: receipt.error,
+        };
+      } else if (receipt.status === 'failed') {
+        result = {
+          requestId, bank: input.bank, processingStatus: 'failed',
+          status: 'failed', verified: false,
+          referenceNumber: receipt.referenceNumber || reference,
+          error: receipt.error || 'Fetch failed',
+        };
+      } else {
+        result = {
+          requestId, bank: input.bank, processingStatus: 'completed',
+          status: 'success', verified: true,
+          amount: receipt.amount,
+          currency: receipt.currency,
+          senderName: receipt.payerName,
+          senderAccount: receipt.payerAccount,
+          receiverName: receipt.receiverName,
+          receiverAccount: receipt.receiverAccount,
+          referenceNumber: receipt.referenceNumber,
+          accountSuffix: suffix,
+          date: receipt.date,
+          source: receipt.source,
+        };
+      }
+    } else if (bank === 'dashen') {
+      const receipt = await fetchDashenReceipt(reference);
+
+      if (receipt.status === 'not_found') {
+        result = {
+          requestId, bank: input.bank, processingStatus: 'completed',
+          status: 'not_found', verified: false,
+          referenceNumber: receipt.referenceNumber || reference,
+          error: receipt.error,
+        };
+      } else if (receipt.status === 'failed') {
+        result = {
+          requestId, bank: input.bank, processingStatus: 'failed',
+          status: 'failed', verified: false,
+          referenceNumber: receipt.referenceNumber || reference,
+          error: receipt.error || 'Fetch failed',
+        };
+      } else {
+        result = {
+          requestId, bank: input.bank, processingStatus: 'completed',
+          status: 'success', verified: true,
+          amount: receipt.amount,
+          currency: receipt.currency,
+          senderName: receipt.payerName,
+          senderAccount: receipt.payerAccount,
+          receiverName: receipt.receiverName,
+          receiverAccount: receipt.receiverAccount,
+          referenceNumber: receipt.referenceNumber,
+          date: receipt.date,
+          serviceCharge: receipt.serviceCharge,
+          vat: receipt.vat,
+          totalAmount: receipt.totalAmount,
+          source: receipt.source,
+        };
+      }
+    } else if (bank === 'mpesa') {
+      const receipt = await fetchMpesaReceipt(reference);
+
+      if (receipt.status === 'not_found') {
+        result = {
+          requestId, bank: input.bank, processingStatus: 'completed',
+          status: 'not_found', verified: false,
+          referenceNumber: receipt.referenceNumber || reference,
+          error: receipt.error,
+        };
+      } else if (receipt.status === 'failed') {
+        result = {
+          requestId, bank: input.bank, processingStatus: 'failed',
+          status: 'failed', verified: false,
+          referenceNumber: receipt.referenceNumber || reference,
+          geoBlocked: receipt.geoBlocked,
+          error: receipt.error || 'Fetch failed',
+        };
+      } else {
+        result = {
+          requestId, bank: input.bank, processingStatus: 'completed',
+          status: 'success', verified: true,
+          amount: receipt.amount,
+          currency: receipt.currency,
+          senderName: receipt.payerName,
+          senderAccount: receipt.payerPhone,
+          receiverName: receipt.receiverName,
+          receiverAccount: receipt.receiverAccount,
+          referenceNumber: receipt.referenceNumber,
+          date: receipt.date,
+          serviceCharge: receipt.serviceCharge,
+          source: receipt.source,
+        };
+      }
     } else {
-      throw new Error('Unsupported bank: ' + input.bank + '. Supported banks: cbe, telebirr.');
+      throw new Error(
+        'Unsupported bank: ' + input.bank + '. Supported banks: cbe, telebirr, boa, dashen, mpesa.',
+      );
     }
 
     updateStmt.run({
@@ -199,16 +321,24 @@ export async function runVerification(requestId: string, input: VerifyInput): Pr
     };
     updateStmt.run({
       request_id: requestId,
-      processing_status: 'failed', status: 'failed', verified: 0,
-      amount: null, currency: null,
-      sender_name: null, receiver_name: null, receiver_account: null,
-      raw_data: null, error: result.error ?? 'unknown',
+      processing_status: 'failed',
+      status: 'failed',
+      verified: 0,
+      amount: null,
+      currency: null,
+      sender_name: null,
+      receiver_name: null,
+      receiver_account: null,
+      raw_data: null,
+      error: result.error ?? 'unknown',
     });
   }
 
   sseBus.emit(requestId, {
-    requestId, processingStatus: result.processingStatus,
-    status: result.status, verified: result.verified,
+    requestId,
+    processingStatus: result.processingStatus,
+    status: result.status,
+    verified: result.verified,
   });
   sseBus.close(requestId, 'terminal');
 

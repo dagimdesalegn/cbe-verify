@@ -1,6 +1,7 @@
 require('dotenv').config();
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 
 const BASE = process.env.TEST_BASE_URL || 'http://localhost:3000';
 const ADMIN = process.env.ADMIN_API_KEY;
@@ -31,7 +32,7 @@ async function verifyAndPoll(payload, key) {
     headers: {
       'content-type': 'application/json',
       'x-api-key': key,
-      'idempotency-key': require('crypto').randomUUID(),
+      'idempotency-key': crypto.randomUUID(),
     },
     body: JSON.stringify(payload),
   });
@@ -52,14 +53,18 @@ async function verifyAndPoll(payload, key) {
   return r;
 }
 
+function heading(n, title) {
+  console.log('\n=== ' + n + '. ' + title + ' ===');
+}
+
 (async () => {
-  console.log('\n=== 1. Health check ===');
+  heading(1, 'Health check');
   {
     const r = await jfetch(BASE + '/health/live');
     console.log('Status:', r.status, '| Body:', JSON.stringify(r.body));
   }
 
-  console.log('\n=== 2. Create API key ===');
+  heading(2, 'Create API key');
   let key;
   {
     const r = await jfetch(BASE + '/api/api-keys', {
@@ -74,37 +79,138 @@ async function verifyAndPoll(payload, key) {
     console.log('\n>>> API KEY: ' + key);
   }
 
-  console.log('\n=== 3. CBE - Verify by SMS ===');
-  {
-    const r = await verifyAndPoll({ bank: 'cbe', referenceNumber: FIXTURES.cbe.smsText }, key);
+  // ============================================================
+  // CBE
+  // ============================================================
+
+  heading(3, 'CBE - Verify by SMS');
+  if (FIXTURES.cbe && FIXTURES.cbe.smsText) {
+    const r = await verifyAndPoll(
+      { bank: 'cbe', referenceNumber: FIXTURES.cbe.smsText },
+      key,
+    );
     console.log('Status:', r.status);
     console.log(JSON.stringify(r.body, null, 2));
+  } else {
+    console.log('skipped (no fixture)');
   }
 
-  console.log('\n=== 4. CBE - Verify by reference + suffix ===');
-  {
-    const r = await verifyAndPoll({
-      bank: 'cbe',
-      referenceNumber: FIXTURES.cbe.referenceNumber,
-      accountSuffix: FIXTURES.cbe.accountSuffix,
-    }, key);
+  heading(4, 'CBE - Verify by reference + suffix');
+  if (FIXTURES.cbe && FIXTURES.cbe.referenceNumber) {
+    const r = await verifyAndPoll(
+      {
+        bank: 'cbe',
+        referenceNumber: FIXTURES.cbe.referenceNumber,
+        accountSuffix: FIXTURES.cbe.accountSuffix,
+      },
+      key,
+    );
     console.log('Status:', r.status);
     console.log(JSON.stringify(r.body, null, 2));
+  } else {
+    console.log('skipped (no fixture)');
   }
 
-  console.log('\n=== 5. Telebirr - Verify by SMS ===');
-  {
-    const r = await verifyAndPoll({ bank: 'telebirr', referenceNumber: FIXTURES.telebirr.smsText }, key);
+  // ============================================================
+  // Telebirr
+  // ============================================================
+
+  heading(5, 'Telebirr - Verify by SMS');
+  if (FIXTURES.telebirr && FIXTURES.telebirr.smsText) {
+    const r = await verifyAndPoll(
+      { bank: 'telebirr', referenceNumber: FIXTURES.telebirr.smsText },
+      key,
+    );
     console.log('Status:', r.status);
     console.log(JSON.stringify(r.body, null, 2));
+  } else {
+    console.log('skipped (no fixture)');
   }
 
-  console.log('\n=== 6. Telebirr - Verify by transaction number ===');
-  {
-    const r = await verifyAndPoll({ bank: 'telebirr', referenceNumber: FIXTURES.telebirr.referenceNumber }, key);
+  heading(6, 'Telebirr - Verify by transaction number');
+  if (FIXTURES.telebirr && FIXTURES.telebirr.referenceNumber) {
+    const r = await verifyAndPoll(
+      { bank: 'telebirr', referenceNumber: FIXTURES.telebirr.referenceNumber },
+      key,
+    );
     console.log('Status:', r.status);
     console.log(JSON.stringify(r.body, null, 2));
+    if (r.body && r.body.data && r.body.data[0] && r.body.data[0].geoBlocked) {
+      console.log('\n>>> Geo-blocked (expected outside Ethiopian network).');
+    }
+  } else {
+    console.log('skipped (no fixture)');
+  }
+
+  // ============================================================
+  // BOA
+  // ============================================================
+
+  heading(7, 'BOA - Verify by reference + suffix');
+  if (FIXTURES.boa && FIXTURES.boa.referenceNumber) {
+    const r = await verifyAndPoll(
+      {
+        bank: 'boa',
+        referenceNumber: FIXTURES.boa.referenceNumber,
+        accountSuffix: FIXTURES.boa.accountSuffix,
+      },
+      key,
+    );
+    console.log('Status:', r.status);
+    console.log(JSON.stringify(r.body, null, 2));
+  } else {
+    console.log('skipped (no fixture)');
+  }
+
+  // ============================================================
+  // Dashen
+  // ============================================================
+
+  heading(8, 'Dashen - Verify by reference');
+  if (FIXTURES.dashen && FIXTURES.dashen.referenceNumber) {
+    const r = await verifyAndPoll(
+      { bank: 'dashen', referenceNumber: FIXTURES.dashen.referenceNumber },
+      key,
+    );
+    console.log('Status:', r.status);
+    console.log(JSON.stringify(r.body, null, 2));
+  } else {
+    console.log('skipped (no fixture)');
+  }
+
+  // ============================================================
+  // M-Pesa
+  // ============================================================
+
+  heading(9, 'M-Pesa - Verify by transaction id');
+  if (FIXTURES.mpesa && FIXTURES.mpesa.referenceNumber) {
+    const r = await verifyAndPoll(
+      { bank: 'mpesa', referenceNumber: FIXTURES.mpesa.referenceNumber },
+      key,
+    );
+    console.log('Status:', r.status);
+    console.log(JSON.stringify(r.body, null, 2));
+    if (r.body && r.body.data && r.body.data[0] && r.body.data[0].geoBlocked) {
+      console.log('\n>>> Geo-blocked (expected outside Ethiopian network).');
+    }
+  } else {
+    console.log('skipped (no fixture)');
+  }
+
+  heading(10, 'M-Pesa - Verify by SMS');
+  if (FIXTURES.mpesa && FIXTURES.mpesa.smsText) {
+    const r = await verifyAndPoll(
+      { bank: 'mpesa', referenceNumber: FIXTURES.mpesa.smsText },
+      key,
+    );
+    console.log('Status:', r.status);
+    console.log(JSON.stringify(r.body, null, 2));
+  } else {
+    console.log('skipped (no fixture)');
   }
 
   console.log('\n=== Done ===');
-})().catch((e) => { console.error('FATAL:', e); process.exit(1); });
+})().catch((e) => {
+  console.error('FATAL:', e);
+  process.exit(1);
+});
